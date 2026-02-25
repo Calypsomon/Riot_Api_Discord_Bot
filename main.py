@@ -4,12 +4,17 @@ import logging
 from dotenv import load_dotenv
 import os
 import asyncio
+import requests
+import sqlite3
+from database import init_db, add_user, get_puuid
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(override=True)
 
 # Get the token from environment
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+API_KEY = os.getenv('RIOT_API_KEY') 
+init_db()
 
 handler = logging.FileHandler(filename='discord_bot.log', encoding='utf-8', mode='w')
 intents = discord.Intents.default()
@@ -89,7 +94,71 @@ async def leave(ctx, var: str):
             await role.delete(reason=f"{ctx.author} was the last member, {var} got deleted.")
             await ctx.send(f"{ctx.author.mention} was the last member, {var} got deleted. RIP")
 
-bot.run(DISCORD_TOKEN)
+@bot.command()
+async def connect(ctx, var,var2: str):
+    sent_mesage = await ctx.send(f"Change your Profile Picture to rose in 3 seconds!")
+    await asyncio.sleep(3)
+    
+    puuid_api_key = "https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/" + str(var) + "/" + str(var2) + "?api_key=" + API_KEY
+    puuid = requests.get(puuid_api_key).json()['puuid']
+    pp_url_api_key = "https://euw1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/" + puuid + "?api_key=" + API_KEY
+    picture_id = requests.get(pp_url_api_key).json()['profileIconId']
+    if picture_id == 7:
+        await sent_mesage.edit(content=f"Your Riot Account is Connected! {ctx.author.mention}")
+        add_user(str(ctx.author.id), puuid)
 
+    elif picture_id != 7:
+        await sent_mesage.edit(content=f"Profile Picture is incorrect! {ctx.author.mention}")
+
+@bot.command()
+async def info(ctx):
+    puuid = get_puuid(str(ctx.author.id))
+    if puuid:
+        name_api_key = f"https://europe.api.riotgames.com/riot/account/v1/accounts/by-puuid/{puuid}?api_key={API_KEY}"
+        name = requests.get(name_api_key).json()['gameName']
+        tag = requests.get(name_api_key).json()['tagLine']
+        await ctx.send(f"Your are connected whit {name}#{tag} {ctx.author.mention}")
+        await ctx.send(f"You have {get_lp(puuid)} LP {ctx.author.mention}")
+    else:
+        await ctx.send(f"You haven't connected your Riot Account yet! {ctx.author.mention}")
+
+def get_lp(puuid):
+    lp_api_key = f"https://euw1.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}?api_key={API_KEY}"
+    entries = requests.get(lp_api_key).json()
+    solo_rank = None
+    for entry in entries:
+        if entry['queueType'] ==  "RANKED_SOLO_5x5":
+            solo_rank = entry
+    if solo_rank['tier'] == "IRON":
+        x= 0
+    elif solo_rank['tier'] == "BRONZE":
+        x= 400
+    elif solo_rank['tier'] == "SILVER":
+        x= 800
+    elif solo_rank['tier'] == "GOLD":
+        x= 1200
+    elif solo_rank['tier'] == "PLATINUM":
+        x= 1600
+    elif solo_rank['tier'] == "DIAMOND":
+        x= 2000
+    elif solo_rank['tier'] == "MASTER":
+        x= 2400
+    elif solo_rank['tier'] == "GRANDMASTER":
+        x= 2400
+    elif solo_rank['tier'] == "CHALLENGER":
+        x= 2400
+    if solo_rank['rank'] == "IV":
+        y= 0
+    elif solo_rank['rank'] == "III":
+        y= 100
+    elif solo_rank['rank'] == "II":
+        y= 200
+    elif solo_rank['rank'] == "I":
+        y= 300
+    lp = x + y + solo_rank['leaguePoints']
+    return lp
+
+
+bot.run(DISCORD_TOKEN)
 
 
