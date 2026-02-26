@@ -148,7 +148,7 @@ async def teaminfo(ctx,var:str):
         else:
             await ctx.send(f"{member.mention} hasn't connected their Riot Account yet!")
     avg = combined_lp/count if count > 0 else 0
-    await ctx.send(f"average LP of {rolle.mention}: {avg} LP = {get_rank(avg)}")
+    await ctx.send(f"average LP of {rolle} = {avg} LP / {get_rank(avg)}")
 
 
 def get_lp(puuid):
@@ -196,6 +196,13 @@ def get_rank(lp):
     tiers = ["IV", "III", "II", "I"]
     return f"{ranks[int(rank)]} {tiers[int(tier)]}"
         
+
+#/rating einführen , postet eine nachricht in den teamratings channel mit allen teams in reienfolge und sortiert rechts team nach platz 
+#/match erkennen, sucht in den letzten 5 games des spielers nach games welche von nur team membern gespielt wurden und speichert in matchhistory gewinner und verlierer 
+#/ danach bei teaminfo und rating dei wr einfügen 
+
+
+
 
 
 bot.run(DISCORD_TOKEN)

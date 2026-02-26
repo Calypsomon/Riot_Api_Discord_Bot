@@ -6,3 +6,7 @@
 # bei !connectAccount wird in der league account mit dem dc account verbunden dafür pb endern und mit riot api abfragen ob bild = rose 
 # !TeamStats mit Riot api alle verbundenen accounts des teams rankt punkte zusammen rechnen und rechts anhand der insg punkte sortieren 
 # !teammatch teamx teamy guckt in der matchhistory ob ein spiel gespielt wurde mit beiden teams vollständig wenn ja dann honnor vergeben jadajadajada
+#/rating einführen , postet eine nachricht in den teamratings channel mit allen teams in reienfolge und sortiert rechts team nach platz 
+#/match erkennen, sucht in den letzten 5 games des spielers nach games welche von nur team membern gespielt wurden und speichert in matchhistory gewinner und verlierer 
+#/ danach bei teaminfo und rating dei wr einfügen 
+krass wären noch highleit clips aus den games aber kp wie das geht 
