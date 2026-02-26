@@ -19,6 +19,7 @@ init_db()
 handler = logging.FileHandler(filename='discord_bot.log', encoding='utf-8', mode='w')
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True  # needed to access member lists (role.members, ctx.guild.members, etc.)
 
 # Create bot instance
 bot = commands.Bot(command_prefix='/', intents=intents)
@@ -26,6 +27,11 @@ bot = commands.Bot(command_prefix='/', intents=intents)
 @bot.event
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
+    # make sure member cache is populated; the privileged "Server Members Intent"
+    # must also be enabled in the bot's application settings on the Discord
+    # developer portal.
+    for guild in bot.guilds:
+        await guild.fetch_members().flatten()
 
 @bot.command()
 async def join(ctx, var: str):
@@ -40,6 +46,7 @@ async def join(ctx, var: str):
         role = await ctx.guild.create_role(name=var, colour=discord.Colour.blue(), reason=f"Created by {ctx.author}")
         await ctx.send(f" joined {role.mention}!")
         await ctx.author.add_roles(role)
+        await role.edit(hoist=True)
 
     elif role is not None:
         if role in ctx.author.roles:
@@ -67,7 +74,7 @@ async def join(ctx, var: str):
         try:
             reaction, user = await bot.wait_for('reaction_add', timeout=30.0, check=check)
             if reaction.emoji == '✅':
-                await reaction.message.channel.send(f'{user.mention} Joined!')
+                await reaction.message.channel.send(f'{user.mention} Accepted!')
                 if role.colour in [r.colour for r in ctx.author.roles]:
                     await ctx.send(f"youre part of another team already! {ctx.author.mention}")
                     return
@@ -90,7 +97,9 @@ async def leave(ctx, var: str):
     if role in ctx.author.roles:
         await ctx.author.remove_roles(role)
         await ctx.send(f"You have left {var}!")
-        if role.members == []:
+        # after the removal the member cache will reflect the change when intents.members
+        # is enabled.  check truthiness instead of equality with list for clarity.
+        if not role.members:
             await role.delete(reason=f"{ctx.author} was the last member, {var} got deleted.")
             await ctx.send(f"{ctx.author.mention} was the last member, {var} got deleted. RIP")
 
@@ -122,6 +131,26 @@ async def info(ctx):
     else:
         await ctx.send(f"You haven't connected your Riot Account yet! {ctx.author.mention}")
 
+@bot.command()
+async def teaminfo(ctx,var:str):
+    combined_lp = 0
+    count = 0
+    rolle = discord.utils.get(ctx.guild.roles, name=var)
+    for member in rolle.members:
+        puuid = get_puuid(str(member.id))
+        if puuid:
+            name_api_key = f"https://europe.api.riotgames.com/riot/account/v1/accounts/by-puuid/{puuid}?api_key={API_KEY}"
+            name = requests.get(name_api_key).json()['gameName']
+            tag = requests.get(name_api_key).json()['tagLine']
+            await ctx.send(f"{member} is connected whit {name}#{tag} and has {get_lp(puuid)} LP")
+            combined_lp += get_lp(puuid)
+            count +=1
+        else:
+            await ctx.send(f"{member.mention} hasn't connected their Riot Account yet!")
+    avg = combined_lp/count if count > 0 else 0
+    await ctx.send(f"average LP of {rolle.mention}: {avg} LP = {get_rank(avg)}")
+
+
 def get_lp(puuid):
     lp_api_key = f"https://euw1.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}?api_key={API_KEY}"
     entries = requests.get(lp_api_key).json()
@@ -139,14 +168,16 @@ def get_lp(puuid):
         x= 1200
     elif solo_rank['tier'] == "PLATINUM":
         x= 1600
+    elif solo_rank['tier'] == "EMERALD":
+        x= 2000 
     elif solo_rank['tier'] == "DIAMOND":
-        x= 2000
+        x= 2400
     elif solo_rank['tier'] == "MASTER":
-        x= 2400
+        x= 2800
     elif solo_rank['tier'] == "GRANDMASTER":
-        x= 2400
+        x= 3200
     elif solo_rank['tier'] == "CHALLENGER":
-        x= 2400
+        x= 3600
     if solo_rank['rank'] == "IV":
         y= 0
     elif solo_rank['rank'] == "III":
@@ -157,6 +188,14 @@ def get_lp(puuid):
         y= 300
     lp = x + y + solo_rank['leaguePoints']
     return lp
+
+def get_rank(lp):
+    rank = lp/400
+    tier = (lp%400)/100
+    ranks = ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM","EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"]
+    tiers = ["IV", "III", "II", "I"]
+    return f"{ranks[int(rank)]} {tiers[int(tier)]}"
+        
 
 
 bot.run(DISCORD_TOKEN)
