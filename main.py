@@ -7,6 +7,7 @@ import asyncio
 import requests
 import sqlite3
 from database import init_db, add_user, get_puuid
+from riot_api import get_lp, get_rank, get_name
 
 # Load environment variables from .env file
 load_dotenv(override=True)
@@ -27,9 +28,6 @@ bot = commands.Bot(command_prefix='/', intents=intents)
 @bot.event
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
-    # make sure member cache is populated; the privileged "Server Members Intent"
-    # must also be enabled in the bot's application settings on the Discord
-    # developer portal.
     for guild in bot.guilds:
         await guild.fetch_members().flatten()
 
@@ -123,11 +121,8 @@ async def connect(ctx, var,var2: str):
 async def info(ctx):
     puuid = get_puuid(str(ctx.author.id))
     if puuid:
-        name_api_key = f"https://europe.api.riotgames.com/riot/account/v1/accounts/by-puuid/{puuid}?api_key={API_KEY}"
-        name = requests.get(name_api_key).json()['gameName']
-        tag = requests.get(name_api_key).json()['tagLine']
-        await ctx.send(f"Your are connected whit {name}#{tag} {ctx.author.mention}")
-        await ctx.send(f"You have {get_lp(puuid)} LP {ctx.author.mention}")
+        await ctx.send(f"Your are connected whit {get_name(puuid)} {ctx.author.mention}")
+        await ctx.send(f"You have {get_lp(puuid)} LP / {get_rank(get_lp(puuid))}")
     else:
         await ctx.send(f"You haven't connected your Riot Account yet! {ctx.author.mention}")
 
@@ -139,10 +134,7 @@ async def teaminfo(ctx,var:str):
     for member in rolle.members:
         puuid = get_puuid(str(member.id))
         if puuid:
-            name_api_key = f"https://europe.api.riotgames.com/riot/account/v1/accounts/by-puuid/{puuid}?api_key={API_KEY}"
-            name = requests.get(name_api_key).json()['gameName']
-            tag = requests.get(name_api_key).json()['tagLine']
-            await ctx.send(f"{member} is connected whit {name}#{tag} and has {get_lp(puuid)} LP")
+            await ctx.send(f"{member} is connected whit {get_name(puuid)} and has {get_lp(puuid)} LP")
             combined_lp += get_lp(puuid)
             count +=1
         else:
@@ -150,52 +142,42 @@ async def teaminfo(ctx,var:str):
     avg = combined_lp/count if count > 0 else 0
     await ctx.send(f"average LP of {rolle} = {avg} LP / {get_rank(avg)}")
 
+@bot.command()
+async def stats(ctx):
+    statschannel = discord.utils.get(ctx.guild.text_channels, name="stats")
+    if statschannel is None:
+        await ctx.send("Could not find a channel named 'stats'.")
+        return
+    old_channel = statschannel
+    new_channel = await old_channel.clone()
+    await old_channel.delete()
+    teams = []
+    for role in ctx.guild.roles:
+        if role.colour == discord.Colour.blue():
+            teams.append(role)
+    team_stats = []
+    for team in teams:
+        combined_lp = 0
+        count = 0
+        for member in team.members:
+            puuid = get_puuid(str(member.id))
+            if puuid:
+                try:
+                    lp = get_lp(puuid)
+                except Exception:
+                    # skip members we can't resolve (API error or unranked)
+                    continue
+                combined_lp += lp
+                count += 1
+        avg = combined_lp/count if count > 0 else 0
+        team_stats.append((team.name, avg, team))
+    team_stats.sort(key=lambda x: x[1], reverse=True)
+    stats_message = "Team Rankings:\n"
+    for i, (team_name, avg_lp, team) in enumerate(team_stats, start=1):
+        stats_message += f"{i}. {team_name} - {avg_lp} LP / {get_rank(avg_lp)}\n"
+        await team.edit(position=len(team_stats)-i+1)
+    await new_channel.send(stats_message)
 
-def get_lp(puuid):
-    lp_api_key = f"https://euw1.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}?api_key={API_KEY}"
-    entries = requests.get(lp_api_key).json()
-    solo_rank = None
-    for entry in entries:
-        if entry['queueType'] ==  "RANKED_SOLO_5x5":
-            solo_rank = entry
-    if solo_rank['tier'] == "IRON":
-        x= 0
-    elif solo_rank['tier'] == "BRONZE":
-        x= 400
-    elif solo_rank['tier'] == "SILVER":
-        x= 800
-    elif solo_rank['tier'] == "GOLD":
-        x= 1200
-    elif solo_rank['tier'] == "PLATINUM":
-        x= 1600
-    elif solo_rank['tier'] == "EMERALD":
-        x= 2000 
-    elif solo_rank['tier'] == "DIAMOND":
-        x= 2400
-    elif solo_rank['tier'] == "MASTER":
-        x= 2800
-    elif solo_rank['tier'] == "GRANDMASTER":
-        x= 3200
-    elif solo_rank['tier'] == "CHALLENGER":
-        x= 3600
-    if solo_rank['rank'] == "IV":
-        y= 0
-    elif solo_rank['rank'] == "III":
-        y= 100
-    elif solo_rank['rank'] == "II":
-        y= 200
-    elif solo_rank['rank'] == "I":
-        y= 300
-    lp = x + y + solo_rank['leaguePoints']
-    return lp
-
-def get_rank(lp):
-    rank = lp/400
-    tier = (lp%400)/100
-    ranks = ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM","EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"]
-    tiers = ["IV", "III", "II", "I"]
-    return f"{ranks[int(rank)]} {tiers[int(tier)]}"
-        
 
 #/rating einführen , postet eine nachricht in den teamratings channel mit allen teams in reienfolge und sortiert rechts team nach platz 
 #/match erkennen, sucht in den letzten 5 games des spielers nach games welche von nur team membern gespielt wurden und speichert in matchhistory gewinner und verlierer 
