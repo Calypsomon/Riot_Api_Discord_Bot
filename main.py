@@ -179,7 +179,6 @@ async def stats(ctx):
     await new_channel.send(stats_message)
 
 
-#/rating einführen , postet eine nachricht in den teamratings channel mit allen teams in reienfolge und sortiert rechts team nach platz 
 #/match erkennen, sucht in den letzten 5 games des spielers nach games welche von nur team membern gespielt wurden und speichert in matchhistory gewinner und verlierer 
 #/ danach bei teaminfo und rating dei wr einfügen 
 
@@ -190,3 +189,4 @@ async def stats(ctx):
 bot.run(DISCORD_TOKEN)
 
 
+ 
